@@ -1,0 +1,6 @@
+{
+  "name": "Generador de Boletas",
+  "description": "Una Aplicación Web Progresiva (PWA) interactiva para generar y emitir boletas electrónicas editables.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Generador de Boletas",
+  "short_name": "Boletas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#0050B3",
+  "description": "Sistema generador y emisor de boletas electrónicas",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

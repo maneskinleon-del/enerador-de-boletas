@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-outfit: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand-dark: #111827;
+  --color-brand-mute: #9ca3af;
+  
+  /* Register theme colors with default values in Tailwind */
+  --color-t-primary: #1e3a8a;
+  --color-t-primary-light: #2563eb;
+  --color-t-accent: #3b82f6;
+  --color-t-accent-bg: #eff6ff;
+  --color-t-text: #1e293b;
+  --color-t-border: #cbd5e1;
+}
+
+:root {
+  /* Default: Classic Blue */
+  --color-t-primary: #1e3a8a;
+  --color-t-primary-light: #2563eb;
+  --color-t-accent: #3b82f6;
+  --color-t-accent-bg: #eff6ff;
+  --color-t-text: #1e293b;
+  --color-t-border: #cbd5e1;
+}
+
+.theme-classic {
+  --color-t-primary: #1e3a8a;
+  --color-t-primary-light: #2563eb;
+  --color-t-accent: #3b82f6;
+  --color-t-accent-bg: #eff6ff;
+  --color-t-text: #1e293b;
+  --color-t-border: #cbd5e1;
+}
+
+.theme-emerald {
+  --color-t-primary: #064e3b;
+  --color-t-primary-light: #059669;
+  --color-t-accent: #10b981;
+  --color-t-accent-bg: #ecfdf5;
+  --color-t-text: #0f172a;
+  --color-t-border: #a7f3d0;
+}
+
+.theme-minimalist {
+  --color-t-primary: #18181b;
+  --color-t-primary-light: #52525b;
+  --color-t-accent: #71717a;
+  --color-t-accent-bg: #f4f4f5;
+  --color-t-text: #09090b;
+  --color-t-border: #d4d4d8;
+}
+
+.theme-violet {
+  --color-t-primary: #4c1d95;
+  --color-t-primary-light: #7c3aed;
+  --color-t-accent: #8b5cf6;
+  --color-t-accent-bg: #f5f3ff;
+  --color-t-text: #1e1b4b;
+  --color-t-border: #ddd6fe;
+}
+
+@layer utilities {
+  /* Hide arrows on number inputs */
+  .no-spinners::-webkit-outer-spin-button,
+  .no-spinners::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-spinners {
+    -moz-appearance: textfield;
+  }
+  
+  /* Scrollbar custom style */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0.8cm;
+    size: letter portrait;
+  }
+  body, html {
+    background: white !important;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #root {
+    display: block !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+  .print-card-border {
+    border: 1px solid var(--color-t-border) !important;
+  }
+}
+
