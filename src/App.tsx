@@ -473,19 +473,71 @@ export default function App() {
     });
   };
 
+  const createReceiptCaptureClone = (source: HTMLDivElement) => {
+    const clone = source.cloneNode(true) as HTMLDivElement;
+    const sourceStyles = window.getComputedStyle(source);
+    const themeVariables = [
+      '--color-t-primary',
+      '--color-t-primary-light',
+      '--color-t-accent',
+      '--color-t-accent-bg',
+      '--color-t-text',
+      '--color-t-border'
+    ];
+
+    themeVariables.forEach((variable) => {
+      clone.style.setProperty(variable, sourceStyles.getPropertyValue(variable));
+    });
+
+    clone.removeAttribute('id');
+    clone.style.width = '816px';
+    clone.style.maxWidth = 'none';
+    clone.style.minHeight = '1056px';
+    clone.style.height = 'auto';
+    clone.style.transform = 'none';
+    clone.style.transformOrigin = 'top center';
+    clone.style.position = 'absolute';
+    clone.style.left = '-10000px';
+    clone.style.top = '0';
+    clone.style.zIndex = '-1';
+    clone.style.pointerEvents = 'none';
+    clone.style.overflow = 'visible';
+    clone.style.borderRadius = '0';
+    clone.style.boxShadow = 'none';
+
+    clone.querySelectorAll<HTMLElement>('[class*="print:hidden"]').forEach((element) => {
+      element.style.display = 'none';
+    });
+
+    document.body.appendChild(clone);
+
+    return {
+      clone,
+      cleanup: () => clone.remove()
+    };
+  };
+
   // PDF Export logic
   const handleExportPDFDirect = async () => {
     const element = paperRef.current;
     if (!element) return;
     
     setAiLoading(true);
+    const { clone, cleanup } = createReceiptCaptureClone(element);
+
     try {
-      // Add a scale for higher quality printing
-      const canvas = await html2canvas(element, {
+      const captureHeight = Math.max(clone.scrollHeight, 1056);
+      const canvas = await html2canvas(clone, {
         scale: 2.5,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        width: 816,
+        height: captureHeight,
+        windowWidth: 816,
+        windowHeight: captureHeight,
+        scrollX: 0,
+        scrollY: 0
       });
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       
@@ -502,10 +554,9 @@ export default function App() {
       pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
       
       let heightLeft = imgHeight - pageHeight;
-      let position = 0;
       
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      while (heightLeft > 0) {
+        const position = heightLeft - imgHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
@@ -518,6 +569,7 @@ export default function App() {
       console.error('Error generating PDF:', error);
       alert('Hubo un error al generar el PDF. Por favor, utiliza la opción de Guardar en PDF Nativo.');
     } finally {
+      cleanup();
       setAiLoading(false);
       setTimeout(() => setAiStatus({ type: '', message: '' }), 4000);
     }

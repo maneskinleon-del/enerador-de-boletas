@@ -94,24 +94,47 @@
 
 @media print {
   @page {
-    margin: 0.8cm;
+    margin: 0;
     size: letter portrait;
   }
   body, html {
     background: white !important;
     margin: 0;
     padding: 0;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   #root {
     display: block !important;
+    overflow: visible !important;
   }
   .print-hide {
     display: none !important;
   }
   .print-card-border {
     border: 1px solid var(--color-t-border) !important;
+  }
+  main {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  main > div {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #receipt-paper {
+    width: 816px !important;
+    max-width: none !important;
+    min-height: 1056px !important;
+    transform: none !important;
+    transform-origin: top center !important;
+    overflow: visible !important;
+    box-shadow: none !important;
   }
 }
 
