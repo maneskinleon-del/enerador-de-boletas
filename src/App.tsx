@@ -119,6 +119,74 @@ export default function App() {
   // Editor states
   const [activeTab, setActiveTab] = useState<'documento' | 'emisor_receptor' | 'items' | 'ai' | 'historial'>('documento');
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit');
+  const [showAdvancedMobile, setShowAdvancedMobile] = useState(false);
+  const [mobileQuickMode, setMobileQuickMode] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [paperHeight, setPaperHeight] = useState(1056);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const paperRef = useRef<HTMLDivElement>(null);
+
+  // Check if screen is mobile size (under 1024px)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // ResizeObserver for dynamic preview scaling on mobile
+  useEffect(() => {
+    const containerElement = containerRef.current;
+    const paperElement = document.getElementById('receipt-paper') as HTMLDivElement | null;
+    if (!containerElement || !paperElement) return;
+
+    let frameId = 0;
+
+    const updatePaperScale = () => {
+      const containerWidth = containerElement.clientWidth;
+      const paperWidth = paperElement.offsetWidth || 816;
+      const nextScale = containerWidth > 0 && paperWidth > 0
+        ? Math.min(1, containerWidth / paperWidth)
+        : 1;
+
+      setPaperHeight(paperElement.scrollHeight);
+      setScale(nextScale);
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(updatePaperScale);
+    });
+
+    updatePaperScale();
+    resizeObserver.observe(containerElement);
+    resizeObserver.observe(paperElement);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // Quick Mode Sync Effect: enforce exactly 1 item with quantity = 1, discount = 0 when active
+  useEffect(() => {
+    if (isMobile && mobileQuickMode) {
+      setData(d => {
+        const firstItem = d.items[0] || { id: Date.now().toString(), description: "", quantity: 1, unitPrice: 0, discount: 0, image: '' };
+        return {
+          ...d,
+          items: [{
+            ...firstItem,
+            quantity: 1,
+            discount: 0
+          }]
+        };
+      });
+    }
+  }, [mobileQuickMode, isMobile]);
   
   // Saved states
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>(() => {
@@ -150,8 +218,6 @@ export default function App() {
   
   // Draft Save State
   const [draftName, setDraftName] = useState('');
-  const paperRef = useRef<HTMLDivElement>(null);
-
   // Sync state to local storage
   useEffect(() => {
     localStorage.setItem('boletacraft_invoice_draft', JSON.stringify(data));
@@ -646,33 +712,34 @@ Devuelve únicamente la versión mejorada del texto.`;
       </header>
 
       {/* Main Body Layout */}
-      <div className="flex-1 w-full max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-        
-        {/* Toggle between Edit / Preview in mobile view */}
-        <div className="lg:hidden col-span-12 flex border-b border-slate-800 bg-slate-950/70 backdrop-blur-sm sticky top-[61px] z-40 print:hidden">
-          <button 
-            onClick={() => setMobileView('edit')}
-            className={`flex-1 py-3 text-sm font-bold flex justify-center items-center gap-2 border-b-2 transition-all ${mobileView === 'edit' ? 'border-t-primary text-t-primary bg-slate-900/50' : 'border-transparent text-slate-400'}`}
-          >
-            <Edit2 size={16} />
-            Editar Formulario
-          </button>
-          <button 
-            onClick={() => setMobileView('preview')}
-            className={`flex-1 py-3 text-sm font-bold flex justify-center items-center gap-2 border-b-2 transition-all ${mobileView === 'preview' ? 'border-t-primary text-t-primary bg-slate-900/50' : 'border-transparent text-slate-400'}`}
-          >
-            <Eye size={16} />
-            Vista Previa (PDF)
-          </button>
-        </div>
+      <div className="flex-1 w-full max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 overflow-y-auto lg:overflow-hidden">
 
         {/* ============================================== */}
         {/* LEFT COLUMN: CONTROL PANEL & EDITORS           */}
         {/* ============================================== */}
-        <aside className={`lg:col-span-5 border-r border-slate-800 flex flex-col h-[calc(100vh-61px)] bg-slate-950/40 relative print:hidden ${mobileView === 'edit' ? 'block' : 'hidden lg:flex'}`}>
-          
+        <aside className="col-span-12 lg:col-span-5 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col h-auto lg:h-[calc(100vh-61px)] bg-slate-950/40 relative print:hidden">
+
+          {/* Quick Mode / Advanced Mode Toggle for Mobile only */}
+          <div className="lg:hidden p-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center gap-3">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Modo de Emisión</span>
+            <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+              <button
+                onClick={() => setMobileQuickMode(true)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${mobileQuickMode ? 'bg-t-primary text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Rápido
+              </button>
+              <button
+                onClick={() => setMobileQuickMode(false)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${!mobileQuickMode ? 'bg-t-primary text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Avanzado
+              </button>
+            </div>
+          </div>
+
           {/* Editor Sub-Tabs Navigation */}
-          <div className="flex border-b border-slate-800 bg-slate-950 overflow-x-auto custom-scrollbar shrink-0">
+          <div className={`mobile-tab-list flex border-b border-slate-800 bg-slate-950 overflow-x-auto custom-scrollbar shrink-0 ${mobileQuickMode ? 'hidden lg:flex' : 'flex'}`}>
             <button 
               onClick={() => setActiveTab('documento')}
               className={`px-4 py-3 text-xs font-bold shrink-0 flex items-center gap-1.5 border-b-2 transition-all ${activeTab === 'documento' ? 'border-t-primary text-t-primary-light bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
@@ -711,7 +778,7 @@ Devuelve únicamente la versión mejorada del texto.`;
           </div>
 
           {/* Editor Form Container */}
-          <div className="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-5 text-sm">
+          <div className="flex-1 lg:overflow-y-auto p-5 custom-scrollbar space-y-5 text-sm h-auto lg:h-full">
             
             {/* Status alerts */}
             {aiStatus.message && (
@@ -721,7 +788,108 @@ Devuelve únicamente la versión mejorada del texto.`;
               </div>
             )}
 
-            {/* TAB 1: DOCUMENT CONFIGURATION */}
+            {isMobile && mobileQuickMode ? (
+              <div className="space-y-4">
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                  <h3 className="font-semibold text-slate-200 text-xs uppercase tracking-wider mb-2">Boleta Rápida</h3>
+                  
+                  {/* Tipo de Documento */}
+                  <div>
+                    <label className="text-xs text-slate-400 font-semibold block mb-1">Tipo de Documento</label>
+                    <select
+                      value={data.documentType}
+                      onChange={(e: any) => handleDocumentTypeChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base"
+                    >
+                      <option value="factura">Factura Afecta (+ 19% IVA)</option>
+                      <option value="boleta_venta">Boleta de Ventas (IVA Incluido)</option>
+                      <option value="boleta_honorarios">Boleta de Honorarios (SII Retención 13.75%)</option>
+                      <option value="recibo">Recibo Simple (Sin Impuesto)</option>
+                    </select>
+                  </div>
+
+                  {/* Nombre Cliente */}
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Razón Social / Nombre Cliente</label>
+                    <input 
+                      type="text" 
+                      value={data.client.name} 
+                      onChange={(e) => updateClient('name', e.target.value)}
+                      placeholder="Empresa Cliente S.A."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base" 
+                    />
+                  </div>
+
+                  {/* RUT Cliente */}
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">RUT Cliente</label>
+                    <input 
+                      type="text" 
+                      value={data.client.rut} 
+                      onChange={(e) => updateClient('rut', e.target.value)}
+                      placeholder="78.999.888-7"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base" 
+                    />
+                  </div>
+                </div>
+
+                {/* Detalle del Cobro */}
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                  <h3 className="font-semibold text-slate-200 text-xs uppercase tracking-wider mb-2">Detalle del Cobro</h3>
+                  
+                  {/* Descripción */}
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Descripción del Servicio</label>
+                    <input
+                      type="text"
+                      value={data.items[0]?.description || ''}
+                      onChange={(e) => {
+                        const firstItemId = data.items[0]?.id || '1';
+                        updateItem(firstItemId, 'description', e.target.value);
+                      }}
+                      placeholder="Ej. Honorarios de asesoría mensual"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base"
+                    />
+                  </div>
+
+                  {/* Monto */}
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Monto ($)</label>
+                    <input 
+                      type="number"
+                      value={data.items[0]?.unitPrice === '' || data.items[0]?.unitPrice === 0 ? '' : data.items[0]?.unitPrice}
+                      onChange={(e) => {
+                        const firstItemId = data.items[0]?.id || '1';
+                        const val = e.target.value === '' ? 0 : Number(e.target.value);
+                        updateItem(firstItemId, 'unitPrice', val);
+                      }}
+                      placeholder="0"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base"
+                    />
+                  </div>
+                </div>
+
+                {/* Botones de acción principales */}
+                <div className="pt-2 flex flex-col gap-3">
+                  <button
+                    onClick={handleExportPDFDirect}
+                    disabled={aiLoading}
+                    className="w-full bg-gradient-to-r from-t-primary to-t-primary-light text-white font-bold h-12 rounded-xl flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    {aiLoading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                    <span>Descargar PDF</span>
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="w-full bg-slate-800 border border-slate-700 text-slate-200 font-semibold h-12 rounded-xl flex items-center justify-center gap-2"
+                  >
+                    <Printer size={18} />
+                    <span>Imprimir / PDF Nativo</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
             {activeTab === 'documento' && (
               <div className="space-y-4">
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
@@ -760,7 +928,7 @@ Devuelve únicamente la versión mejorada del texto.`;
                   {/* Theme Selector */}
                   <div>
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Plantilla de Color / Estilo</label>
-                    <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
                       <button 
                         onClick={() => setData(d => ({ ...d, theme: 'classic' }))}
                         className={`flex items-center justify-between border rounded-lg p-2.5 transition-all text-xs font-semibold ${data.theme === 'classic' ? 'border-blue-500 bg-blue-950/20 text-blue-300' : 'border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400'}`}
@@ -799,7 +967,7 @@ Devuelve únicamente la versión mejorada del texto.`;
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
                   <h3 className="font-semibold text-slate-200 flex items-center gap-2 text-xs uppercase tracking-wider mb-2">Metadatos del Documento</h3>
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">N° de Documento</label>
                       <input 
@@ -865,7 +1033,7 @@ Devuelve únicamente la versión mejorada del texto.`;
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">RUT Emisor</label>
                       <input 
@@ -973,7 +1141,7 @@ Devuelve únicamente la versión mejorada del texto.`;
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">RUT Cliente</label>
                       <input 
@@ -1087,7 +1255,7 @@ Devuelve únicamente la versión mejorada del texto.`;
                         />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                           <label className="text-xs text-slate-400 block mb-1">Cantidad</label>
                           <input 
@@ -1403,8 +1571,9 @@ Devuelve solo el texto del correo, incluyendo el Asunto y el Cuerpo de forma pul
                 </div>
               </div>
             )}
-
-          </div>
+          </>
+        )}
+      </div>
 
           {/* Quick tips footer in sidebar */}
           <div className="p-4 border-t border-slate-800 bg-slate-950/70 text-slate-500 text-[11px] flex items-start gap-2 shrink-0">
@@ -1418,14 +1587,26 @@ Devuelve solo el texto del correo, incluyendo el Asunto y el Cuerpo de forma pul
         {/* ============================================== */}
         {/* RIGHT COLUMN: LIVE PDF PAPER PREVIEW           */}
         {/* ============================================== */}
-        <main className={`lg:col-span-7 flex flex-col bg-slate-900 p-4 sm:p-8 md:p-12 overflow-y-auto custom-scrollbar h-[calc(100vh-61px)] items-center justify-start print:bg-white print:p-0 print:h-auto print:overflow-visible ${mobileView === 'preview' ? 'block' : 'hidden lg:block'}`}>
+        <main className="col-span-12 lg:col-span-7 flex flex-col bg-slate-900 p-4 sm:p-8 md:p-12 h-auto lg:h-[calc(100vh-61px)] lg:overflow-y-auto items-center justify-start print:bg-white print:p-0 print:h-auto print:overflow-visible w-full">
           
-          {/* Virtual Sheet of Paper Container */}
+          {/* Scaled preview container for mobile adaptability */}
           <div 
-            ref={paperRef}
-            id="receipt-paper"
-            className="w-full max-w-[816px] min-h-[1056px] bg-white text-slate-900 shadow-2xl relative flex flex-col justify-between print:shadow-none print:w-full print:max-w-none print:min-h-0 overflow-hidden rounded-md print:rounded-none"
+            ref={containerRef}
+            className="w-full flex justify-center items-start overflow-hidden print:overflow-visible print:h-auto"
+            style={{ 
+              height: scale < 1 ? `${paperHeight * scale}px` : 'auto'
+            }}
           >
+            {/* Virtual Sheet of Paper Container */}
+            <div 
+              ref={paperRef}
+              id="receipt-paper"
+              className="w-[816px] min-h-[1056px] bg-white text-slate-900 shadow-2xl relative flex flex-col justify-between print:shadow-none print:w-full print:max-w-none print:min-h-0 overflow-hidden rounded-md print:rounded-none shrink-0"
+              style={{
+                transform: scale < 1 ? `scale(${scale})` : 'none',
+                transformOrigin: 'top center'
+              }}
+            >
             
             {/* Elegant watermark */}
             <div className="absolute inset-0 bg-white z-0 pointer-events-none flex items-center justify-center overflow-hidden">
@@ -1788,29 +1969,10 @@ Devuelve solo el texto del correo, incluyendo el Asunto y el Cuerpo de forma pul
               </div>
             </footer>
           </div>
+        </div>
 
-        </main>
-      </div>
-
-      {/* Floating Action Button (Only in Preview screen or layout for mobile) */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50 print:hidden lg:hidden">
-        {mobileView === 'edit' ? (
-          <button
-            onClick={() => setMobileView('preview')}
-            className="bg-gradient-to-r from-t-primary to-t-primary-light text-white p-4 rounded-full shadow-2xl flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-transform"
-          >
-            <Eye size={20} />
-          </button>
-        ) : (
-          <button
-            onClick={() => setMobileView('edit')}
-            className="bg-slate-950 border border-slate-800 text-white p-4 rounded-full shadow-2xl flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-transform"
-          >
-            <Edit2 size={20} />
-          </button>
-        )}
-      </div>
-
+      </main>
     </div>
+  </div>
   );
 }
