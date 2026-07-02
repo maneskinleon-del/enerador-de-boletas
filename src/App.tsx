@@ -6,67 +6,14 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { GoogleGenAI } from '@google/genai';
 import { InvoiceData, SavedDraft, SavedClient } from './types';
-
-// Helper component for clean editable inline text
-const EditableText = ({ 
-  value, 
-  onChange, 
-  className = '', 
-  placeholder = '', 
-  readOnly = false,
-  multiline = false
-}: any) => {
-  const commonClasses = `bg-transparent border-none focus:ring-2 focus:ring-t-primary/20 rounded-md outline-none print:appearance-none hover:bg-t-accent-bg/80 focus:bg-t-accent-bg print:hover:bg-transparent transition-colors text-inherit font-inherit ${className} ${readOnly ? 'hover:bg-transparent focus:ring-0 cursor-default' : 'cursor-text px-1'}`;
-  
-  if (multiline) {
-    return (
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        readOnly={readOnly}
-        className={`${commonClasses} resize-none block py-1 overflow-hidden print:overflow-visible`}
-        rows={Math.max(1, (value.match(/\n/g) || []).length + 1)}
-        onInput={(e) => {
-          const target = e.target as HTMLTextAreaElement;
-          target.style.height = 'auto';
-          target.style.height = target.scrollHeight + 'px';
-        }}
-        style={{ height: value ? 'auto' : undefined }}
-      />
-    );
-  }
-
-  return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      className={`${commonClasses} py-0.5`}
-    />
-  );
-};
-
-// Helper component for clean editable inline numbers
-const EditableNumber = ({ value, onChange, className = '', placeholder = '', readOnly = false }: any) => {
-  return (
-    <input
-      type="number"
-      value={value === '' ? '' : value}
-      onChange={(e) => {
-        const val = e.target.value;
-        onChange(val === '' ? '' : Number(val));
-      }}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      className={`no-spinners bg-transparent border-none focus:ring-2 focus:ring-t-primary/20 rounded-md outline-none print:appearance-none hover:bg-t-accent-bg/80 focus:bg-t-accent-bg print:hover:bg-transparent transition-colors text-inherit font-inherit ${className} ${readOnly ? 'hover:bg-transparent focus:ring-0 cursor-default' : 'cursor-text px-1 py-0.5'}`}
-    />
-  );
-};
+import { EditableText } from './components/EditableText';
+import { EditableNumber } from './components/EditableNumber';
+import { RutField } from './components/RutField';
+import { computeInvoiceTotals } from './utils/calculations';
+import { formatCurrency as formatCurrencyValue } from './utils/currency';
+import { safeGetJSON, safeSetItem } from './utils/storage';
+import { requestFillFromText, requestPolishNotes, requestEmailDraft } from './utils/geminiClient';
 
 const defaultData: InvoiceData = {
   documentType: 'factura',
@@ -74,14 +21,14 @@ const defaultData: InvoiceData = {
   currency: 'CLP',
   company: {
     name: "Soluciones Tecnológicas SpA",
-    rut: "76.452.891-K",
+    rut: "76.452.891-3",
     activity: "Servicios de Consultoría y Desarrollo de Software",
     address: "Av. Andrés Bello 2711, Of 1202, Las Condes, Santiago",
     logo: ''
   },
   client: {
     name: "Comercializadora Pacífico Ltda",
-    rut: "78.112.304-5",
+    rut: "78.112.304-8",
     address: "Calle Los Almendros 450, Viña del Mar",
     contact: "finanzas@pacifico.cl"
   },
@@ -101,20 +48,12 @@ const defaultData: InvoiceData = {
     website: "www.solucionestecnologicas.cl",
     greeting: "Gracias por hacer negocios con nosotros."
   },
-  notes: "Banco de Chile\nCuenta Corriente: 00-123-45678-09\nRut: 76.452.891-K\nCorreo para comprobante: pagos@soluciones.cl",
+  notes: "Banco de Chile\nCuenta Corriente: 00-123-45678-09\nRut: 76.452.891-3\nCorreo para comprobante: pagos@soluciones.cl",
   globalDiscount: 0
 };
 
 export default function App() {
-  const [data, setData] = useState<InvoiceData>(() => {
-    try {
-      const saved = localStorage.getItem('boletacraft_invoice_draft');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn('Could not load from localStorage', e);
-    }
-    return defaultData;
-  });
+  const [data, setData] = useState<InvoiceData>(() => safeGetJSON('boletacraft_invoice_draft', defaultData));
 
   // Editor states
   const [activeTab, setActiveTab] = useState<'documento' | 'emisor_receptor' | 'items' | 'ai' | 'historial'>('documento');
@@ -189,29 +128,12 @@ export default function App() {
   }, [mobileQuickMode, isMobile]);
   
   // Saved states
-  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>(() => {
-    try {
-      const saved = localStorage.getItem('boletacraft_drafts');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>(() => safeGetJSON('boletacraft_drafts', [] as SavedDraft[]));
 
-  const [savedClients, setSavedClients] = useState<SavedClient[]>(() => {
-    try {
-      const saved = localStorage.getItem('boletacraft_clients');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [savedClients, setSavedClients] = useState<SavedClient[]>(() => safeGetJSON('boletacraft_clients', [] as SavedClient[]));
 
-  // AI states
-  const [apiKey, setApiKey] = useState<string>(() => {
-    return (import.meta as any).env?.VITE_GEMINI_API_KEY || localStorage.getItem('boletacraft_gemini_key') || '';
-  });
-  const [showKeyInput, setShowKeyInput] = useState(false);
+  // AI states — la API key de Gemini vive solo en el servidor (ver /api/gemini),
+  // el front nunca la maneja.
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiStatus, setAiStatus] = useState<{ type: 'success' | 'error' | '', message: string }>({ type: '', message: '' });
@@ -220,15 +142,15 @@ export default function App() {
   const [draftName, setDraftName] = useState('');
   // Sync state to local storage
   useEffect(() => {
-    localStorage.setItem('boletacraft_invoice_draft', JSON.stringify(data));
+    safeSetItem('boletacraft_invoice_draft', JSON.stringify(data));
   }, [data]);
 
   useEffect(() => {
-    localStorage.setItem('boletacraft_drafts', JSON.stringify(savedDrafts));
+    safeSetItem('boletacraft_drafts', JSON.stringify(savedDrafts));
   }, [savedDrafts]);
 
   useEffect(() => {
-    localStorage.setItem('boletacraft_clients', JSON.stringify(savedClients));
+    safeSetItem('boletacraft_clients', JSON.stringify(savedClients));
   }, [savedClients]);
 
   // Document types names mappings
@@ -362,57 +284,12 @@ export default function App() {
     }
   };
 
-  // Calculations engine according to Document Type
-  const subtotalNeto = data.items.reduce((acc, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.unitPrice) || 0;
-    const disc = Number(item.discount) || 0;
-    return acc + ((qty * price) - disc);
-  }, 0);
-
+  // Calculations engine according to Document Type (ver src/utils/calculations.ts)
+  const { subtotalNeto, baseMonto, taxName, taxValue, finalTotal } = computeInvoiceTotals(data);
   const rawGlobalDiscount = Number(data.globalDiscount) || 0;
-  const baseMonto = Math.max(0, subtotalNeto - rawGlobalDiscount);
 
-  let displayedSubtotal = subtotalNeto;
-  let taxName = 'IVA (19%)';
-  let taxValue = 0;
-  let finalTotal = baseMonto;
-  let exento = 0;
-
-  if (data.documentType === 'factura') {
-    // Neto + IVA
-    taxValue = Math.round(baseMonto * 0.19);
-    finalTotal = baseMonto + taxValue;
-  } else if (data.documentType === 'boleta_venta') {
-    // IVA included
-    finalTotal = baseMonto;
-    const neto = Math.round(baseMonto / 1.19);
-    taxValue = baseMonto - neto;
-    taxName = 'IVA Incluido (19%)';
-  } else if (data.documentType === 'boleta_honorarios') {
-    // Retencion Chilena (13.75% for 2026/2027)
-    const retencionRate = 0.1375;
-    taxName = 'Retención (13.75%)';
-    taxValue = Math.round(baseMonto * retencionRate);
-    finalTotal = baseMonto - taxValue; // Total Líquido
-  } else if (data.documentType === 'recibo') {
-    // No taxes
-    finalTotal = baseMonto;
-    taxValue = 0;
-  }
-
-  // Format currencies dynamically
-  const formatCurrency = (val: number) => {
-    if (data.currency === 'CLP') {
-      return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(val);
-    } else if (data.currency === 'USD') {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-    } else if (data.currency === 'EUR') {
-      return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
-    } else { // UF
-      return `UF ${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)}`;
-    }
-  };
+  // Format currencies dynamically (ver src/utils/currency.ts)
+  const formatCurrency = (val: number) => formatCurrencyValue(val, data.currency);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, onLoad: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -441,7 +318,7 @@ export default function App() {
       currency: 'CLP',
       company: {
         name: "Clara Inés Gómez Valenzuela",
-        rut: "15.782.903-5",
+        rut: "15.782.903-3",
         activity: "Diseño Gráfico Independiente y UX/UI",
         address: "Avenida Providencia 2330, Depto 904, Providencia",
         logo: ''
@@ -579,71 +456,20 @@ export default function App() {
     window.print();
   };
 
-  // Save API Key
-  const saveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('boletacraft_gemini_key', key);
-    setShowKeyInput(false);
-    setAiStatus({ type: 'success', message: 'API Key de Gemini guardada correctamente.' });
-    setTimeout(() => setAiStatus({ type: '', message: '' }), 3000);
-  };
-
-  // Gemini AI Fill
+  // Gemini AI Fill — la llamada a Gemini ahora pasa por /api/gemini (ver
+  // src/utils/geminiClient.ts); la API key nunca llega al navegador.
   const handleAiFill = async () => {
     if (!aiPrompt.trim()) return;
-    if (!apiKey) {
-      setShowKeyInput(true);
-      alert('Por favor ingresa una API Key de Gemini para activar esta función.');
-      return;
-    }
 
     setAiLoading(true);
     setAiStatus({ type: '', message: '' });
 
-    const systemPrompt = `Eres un experto administrativo chileno. Analiza el siguiente texto en español y extrae la información para rellenar un documento de cobro (Boleta o Factura).
-Debes identificar:
-1. El cliente (Nombre/Razón Social, RUT si se menciona, Dirección, Correo/Teléfono).
-2. Los productos o servicios cobrados (Nombre/Descripción, Cantidad, Precio Unitario, y si hay descuento).
-3. Moneda sugerida (CLP, USD, EUR, etc. según el texto).
-
-Genera un objeto JSON estrictamente en este formato (sin rodeos, sin markdown extra, solo el objeto JSON plano):
-{
-  "client": {
-    "name": "Nombre o Razón social encontrada",
-    "rut": "RUT encontrado (formato XX.XXX.XXX-X o vacío)",
-    "address": "Dirección encontrada o vacía",
-    "contact": "Correo o teléfono encontrado o vacío"
-  },
-  "items": [
-    {
-      "description": "Descripción clara del servicio o producto",
-      "quantity": número entero,
-      "unitPrice": número (precio unitario),
-      "discount": número de descuento o 0
-    }
-  ],
-  "currency": "CLP" o "USD" o "EUR"
-}
-
-Texto de usuario a analizar:
-"${aiPrompt}"`;
-
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: systemPrompt,
-        config: {
-          responseMimeType: 'application/json',
-        }
-      });
-
-      const responseText = response.text || '';
-      const parsedData = JSON.parse(responseText);
+      const parsedData = await requestFillFromText(aiPrompt);
 
       // Apply changes to layout
       setData(prev => {
-        const formattedItems = (parsedData.items || []).map((item: any, idx: number) => ({
+        const formattedItems = (parsedData.items || []).map((item, idx: number) => ({
           id: (Date.now() + idx).toString(),
           description: item.description || 'Artículo extraído',
           quantity: Number(item.quantity) || 1,
@@ -677,27 +503,11 @@ Texto de usuario a analizar:
 
   // AI Polish Notes
   const handleAiPolishNotes = async () => {
-    if (!apiKey) {
-      setShowKeyInput(true);
-      alert('Ingresa una API Key para utilizar la asistencia de IA.');
-      return;
-    }
     setAiLoading(true);
     try {
-      const prompt = `Mejora y formaliza las siguientes notas/condiciones de pago para que suenen extremadamente profesionales, claras y educadas. Conserva los datos importantes como cuentas bancarias, plazos o correos de confirmación.
-Notas actuales:
-"${data.notes}"
-
-Devuelve únicamente la versión mejorada del texto.`;
-
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      if (response.text) {
-        setData(d => ({ ...d, notes: response.text.trim() }));
+      const { text } = await requestPolishNotes(data.notes);
+      if (text) {
+        setData(d => ({ ...d, notes: text }));
         setAiStatus({ type: 'success', message: 'Notas profesionalizadas por IA.' });
       }
     } catch (e: any) {
@@ -872,17 +682,12 @@ Devuelve únicamente la versión mejorada del texto.`;
                     />
                   </div>
 
-                  {/* RUT Cliente */}
-                  <div>
-                    <label className="text-xs text-slate-400 block mb-1">RUT Cliente</label>
-                    <input 
-                      type="text" 
-                      value={data.client.rut} 
-                      onChange={(e) => updateClient('rut', e.target.value)}
-                      placeholder="78.999.888-7"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200 text-base" 
-                    />
-                  </div>
+                  <RutField
+                    label="RUT Cliente"
+                    value={data.client.rut}
+                    onChange={(val) => updateClient('rut', val)}
+                    placeholder="78.999.888-7"
+                  />
                 </div>
 
                 {/* Detalle del Cobro */}
@@ -1086,16 +891,12 @@ Devuelve únicamente la versión mejorada del texto.`;
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-slate-400 block mb-1">RUT Emisor</label>
-                      <input 
-                        type="text" 
-                        value={data.company.rut} 
-                        onChange={(e) => updateCompany('rut', e.target.value)}
-                        placeholder="76.123.456-7"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200" 
-                      />
-                    </div>
+                    <RutField
+                      label="RUT Emisor"
+                      value={data.company.rut}
+                      onChange={(val) => updateCompany('rut', val)}
+                      placeholder="76.123.456-7"
+                    />
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">Giro de Actividad</label>
                       <input 
@@ -1194,16 +995,12 @@ Devuelve únicamente la versión mejorada del texto.`;
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-slate-400 block mb-1">RUT Cliente</label>
-                      <input 
-                        type="text" 
-                        value={data.client.rut} 
-                        onChange={(e) => updateClient('rut', e.target.value)}
-                        placeholder="78.999.888-7"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-t-primary text-slate-200" 
-                      />
-                    </div>
+                    <RutField
+                      label="RUT Cliente"
+                      value={data.client.rut}
+                      onChange={(val) => updateClient('rut', val)}
+                      placeholder="78.999.888-7"
+                    />
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">Contacto / Email</label>
                       <input 
@@ -1428,62 +1225,23 @@ Devuelve únicamente la versión mejorada del texto.`;
             {activeTab === 'ai' && (
               <div className="space-y-4">
                 
-                {/* Api Key Banner */}
+                {/* Estado de la conexión IA — la key vive en el servidor, no aquí */}
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-purple-300 flex items-center gap-2 text-xs uppercase tracking-wider">
-                      <Sparkles size={14} />
-                      Conexión Inteligente
-                    </h3>
-                    <button 
-                      onClick={() => setShowKeyInput(!showKeyInput)}
-                      className="text-slate-400 hover:text-white text-xs flex items-center gap-1"
-                    >
-                      <Key size={12} />
-                      {apiKey ? 'Cambiar API Key' : 'Configurar API Key'}
-                    </button>
+                  <h3 className="font-semibold text-purple-300 flex items-center gap-2 text-xs uppercase tracking-wider">
+                    <Sparkles size={14} />
+                    Conexión Inteligente
+                  </h3>
+                  <div className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex items-center gap-2">
+                    <Key size={12} className="text-slate-500 shrink-0" />
+                    <span>El asistente Gemini corre en el servidor: no necesitas ingresar ninguna API Key aquí. Si ves errores, revisa que <code className="text-slate-300">GEMINI_API_KEY</code> esté configurada en el servidor/despliegue.</span>
                   </div>
-                  
-                  {(!apiKey || showKeyInput) && (
-                    <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2">
-                      <p className="text-[11px] text-slate-400 leading-normal">
-                        Para habilitar la IA de auto-rellenado y pulido de datos, introduce tu Gemini API Key. Las claves se guardan localmente en tu navegador.
-                      </p>
-                      <div className="flex gap-2">
-                        <input 
-                          type="password"
-                          placeholder="AIzaSy..."
-                          className="flex-1 bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs text-slate-200"
-                          id="apiKeyInput"
-                        />
-                        <button 
-                          onClick={() => {
-                            const input = document.getElementById('apiKeyInput') as HTMLInputElement;
-                            if (input) saveApiKey(input.value);
-                          }}
-                          className="bg-purple-700 hover:bg-purple-600 text-white px-3 py-1 rounded text-xs font-semibold transition-colors"
-                        >
-                          Guardar
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-500">
-                        ¿No tienes una? Consíguela gratis en <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-purple-400 hover:underline">Google AI Studio</a>.
-                      </p>
-                    </div>
-                  )}
-                  {apiKey && !showKeyInput && (
-                    <div className="text-[11px] text-emerald-400 bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-900/30 flex items-center justify-between">
-                      <span>✓ Asistente Gemini API conectado y listo</span>
-                      <span className="text-[9px] bg-emerald-900/50 text-emerald-300 py-0.5 px-2 rounded-full uppercase font-bold">Activo</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Autofill box */}
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
                   <h3 className="font-semibold text-slate-200 text-xs uppercase tracking-wider">Relleno de Cobro por Texto Natural</h3>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Escribe los detalles de forma libre (ej: *"Cobrar a Carlos Ruiz rut 19230910-2 por un diseño de banner a $45.000 y 3 horas de asesoría a $15.000 la hora"*). Gemini se encargará de extraer e inyectar el cliente y las filas correspondientes.
+                    Escribe los detalles de forma libre (ej: *"Cobrar a Carlos Ruiz rut 19230910-7 por un diseño de banner a $45.000 y 3 horas de asesoría a $15.000 la hora"*). Gemini se encargará de extraer e inyectar el cliente y las filas correspondientes.
                   </p>
                   
                   <textarea 
@@ -1521,30 +1279,17 @@ Devuelve únicamente la versión mejorada del texto.`;
                   </p>
                   <button
                     onClick={async () => {
-                      if (!apiKey) {
-                        setShowKeyInput(true);
-                        alert('Ingresa una API Key para utilizar la IA.');
-                        return;
-                      }
                       setAiLoading(true);
                       try {
-                        const prompt = `Genera un borrador de correo electrónico formal para enviar una factura o boleta de cobro.
-Detalles del documento:
-- Tipo: ${getDocumentTypeName(data.documentType)}
-- Número: ${data.info.number}
-- Emisor: ${data.company.name}
-- Cliente: ${data.client.name}
-- Total: ${formatCurrency(finalTotal)}
-
-Devuelve solo el texto del correo, incluyendo el Asunto y el Cuerpo de forma pulida.`;
-
-                        const ai = new GoogleGenAI({ apiKey: apiKey });
-                        const response = await ai.models.generateContent({
-                          model: 'gemini-2.5-flash',
-                          contents: prompt
+                        const { text } = await requestEmailDraft({
+                          documentType: getDocumentTypeName(data.documentType),
+                          number: data.info.number,
+                          company: data.company.name,
+                          client: data.client.name,
+                          total: formatCurrency(finalTotal),
                         });
-                        if (response.text) {
-                          alert(`Borrador de Correo Generado:\n\n${response.text}`);
+                        if (text) {
+                          alert(`Borrador de Correo Generado:\n\n${text}`);
                         }
                       } catch (e: any) {
                         alert(`Error: ${e.message}`);

@@ -19,6 +19,16 @@
             console.error('ServiceWorker registration failed: ', err);
           });
         });
+
+        // Cuando un SW nuevo toma el control (nueva versión desplegada),
+        // recargamos una sola vez para que el usuario siempre vea la
+        // última versión de la app en vez de quedar pegado en una vieja.
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>

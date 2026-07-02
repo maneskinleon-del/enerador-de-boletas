@@ -17,6 +17,15 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Durante `npm run dev`, /api se redirige al servidor local
+      // (`npm run dev:api`, ver server/dev-server.ts) para no exponer
+      // la API key de Gemini en el navegador.
+      proxy: {
+        '/api': {
+          target: `http://localhost:${process.env.API_PORT || 8787}`,
+          changeOrigin: true,
+        },
+      },
     },
     build: {
       outDir: 'dist',
