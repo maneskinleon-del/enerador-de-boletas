@@ -430,12 +430,17 @@ export default function App() {
       
       pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
       
+      // Multi-page: si el canvas capturado es más alto que una
+      // página del PDF, agregamos páginas adicionales desplazando
+      // la imagen hacia arriba para mostrar la porción siguiente.
       let heightLeft = imgHeight - pageHeight;
       
       while (heightLeft > 0) {
-        const position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        // La siguiente página muestra la imagen desplazada hacia arriba
+        // (el valor negativo de y significa que la imagen empieza antes
+        // del tope de la página, mostrando la porción que no cabía).
+        pdf.addImage(imgData, 'JPEG', 0, -(imgHeight - heightLeft), imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
       
@@ -1389,7 +1394,7 @@ export default function App() {
           {/* Scaled preview container for mobile adaptability */}
           <div 
             ref={containerRef}
-            className="w-full flex justify-center items-start overflow-hidden print:overflow-visible print:h-auto"
+            className="w-full flex justify-center items-start overflow-visible print:overflow-visible print:h-auto"
             style={{ 
               height: scale < 1 ? `${paperHeight * scale}px` : 'auto'
             }}
@@ -1398,7 +1403,7 @@ export default function App() {
             <div 
               ref={paperRef}
               id="receipt-paper"
-              className="w-[816px] min-h-[1056px] bg-white text-slate-900 shadow-2xl relative flex flex-col justify-between print:shadow-none print:w-full print:max-w-none print:min-h-0 overflow-hidden rounded-md print:rounded-none shrink-0"
+              className="w-[816px] min-h-[1056px] bg-white text-slate-900 shadow-2xl relative flex flex-col justify-between print:shadow-none print:w-full print:max-w-none print:min-h-0 overflow-visible rounded-md print:rounded-none shrink-0"
               style={{
                 transform: scale < 1 ? `scale(${scale})` : 'none',
                 transformOrigin: 'top center'
