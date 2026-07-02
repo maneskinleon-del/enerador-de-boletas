@@ -408,6 +408,9 @@ export default function App() {
     const { clone, cleanup } = createReceiptCaptureClone(element);
 
     try {
+      // Espera un ciclo de render para que el DOM se estabilice
+      await new Promise(r => requestAnimationFrame(r));
+      
       const captureHeight = Math.max(clone.scrollHeight, 1056);
       const canvas = await html2canvas(clone, {
         scale: 2.5,
@@ -419,8 +422,9 @@ export default function App() {
         windowWidth: 816,
         windowHeight: captureHeight,
         scrollX: 0,
-        scrollY: 0
+        scrollY: -window.scrollY
       });
+      
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       
       const pdf = new jsPDF({
