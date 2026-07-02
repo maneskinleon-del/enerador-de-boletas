@@ -373,10 +373,15 @@ export default function App() {
     clone.style.height = 'auto';
     clone.style.transform = 'none';
     clone.style.transformOrigin = 'top center';
-    clone.style.position = 'absolute';
-    clone.style.left = '-10000px';
+    // html2canvas no captura elementos con position absolute fuera del
+    // viewport (left: -10000px). Lo posicionamos dentro del viewport en
+    // position: fixed para que html2canvas lo renderice correctamente,
+    // pero con z-index bajo y pointer-events: none para que no interfiera.
+    // No usamos opacity/visibility porque html2canvas ignora esos.
+    clone.style.position = 'fixed';
+    clone.style.left = '0';
     clone.style.top = '0';
-    clone.style.zIndex = '-1';
+    clone.style.zIndex = '-9999';
     clone.style.pointerEvents = 'none';
     clone.style.overflow = 'visible';
     clone.style.borderRadius = '0';
