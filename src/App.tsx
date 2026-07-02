@@ -4,7 +4,7 @@ import {
   Mail, Phone, Globe, ChevronUp, ChevronDown, Check, Save, Sparkles, 
   Key, FileText, Settings, History, User, Building, Eye, Edit2, Loader2, RefreshCw
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { InvoiceData, SavedDraft, SavedClient } from './types';
 import { EditableText } from './components/EditableText';
@@ -373,15 +373,10 @@ export default function App() {
     clone.style.height = 'auto';
     clone.style.transform = 'none';
     clone.style.transformOrigin = 'top center';
-    // html2canvas no captura elementos con position absolute fuera del
-    // viewport (left: -10000px). Lo posicionamos dentro del viewport en
-    // position: fixed para que html2canvas lo renderice correctamente,
-    // pero con z-index bajo y pointer-events: none para que no interfiera.
-    // No usamos opacity/visibility porque html2canvas ignora esos.
-    clone.style.position = 'fixed';
-    clone.style.left = '0';
+    clone.style.position = 'absolute';
+    clone.style.left = '-10000px';
     clone.style.top = '0';
-    clone.style.zIndex = '-9999';
+    clone.style.zIndex = '-1';
     clone.style.pointerEvents = 'none';
     clone.style.overflow = 'visible';
     clone.style.borderRadius = '0';
@@ -409,8 +404,11 @@ export default function App() {
 
     try {
       // Espera un ciclo de render para que el DOM se estabilice
-      await new Promise(r => requestAnimationFrame(r));
-      
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       const captureHeight = Math.max(clone.scrollHeight, 1056);
       const canvas = await html2canvas(clone, {
         scale: 2.5,
@@ -439,17 +437,12 @@ export default function App() {
       
       pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
       
-      // Multi-page: si el canvas capturado es más alto que una
-      // página del PDF, agregamos páginas adicionales desplazando
-      // la imagen hacia arriba para mostrar la porción siguiente.
       let heightLeft = imgHeight - pageHeight;
       
       while (heightLeft > 0) {
+        const position = heightLeft - imgHeight;
         pdf.addPage();
-        // La siguiente página muestra la imagen desplazada hacia arriba
-        // (el valor negativo de y significa que la imagen empieza antes
-        // del tope de la página, mostrando la porción que no cabía).
-        pdf.addImage(imgData, 'JPEG', 0, -(imgHeight - heightLeft), imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
       
