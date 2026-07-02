@@ -422,7 +422,7 @@ export default function App() {
         windowWidth: 816,
         windowHeight: captureHeight,
         scrollX: 0,
-        scrollY: -window.scrollY
+        scrollY: 0
       });
       
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
@@ -582,6 +582,14 @@ export default function App() {
             >
               {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               Descargar PDF
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-200"
+            >
+              <Printer size={14} />
+              PDF Nativo
             </button>
           </div>
         </div>
